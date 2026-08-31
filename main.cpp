@@ -4,9 +4,16 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <sys/epoll.h>
+#include <unordered_map>
 
 int init_server(int port);
 int setNonBlock(int fd);
+int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers);
+
+struct fd_buffer{
+	size_t length;
+	char data[1024];
+};
 
 int main(int argc, char* argv[]){
 	int listenfd = init_server(atoi(argv[1]));
@@ -23,6 +30,7 @@ int main(int argc, char* argv[]){
 	epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &ev);
 
 	epoll_event events[1024];
+	std::unordered_map<int, fd_buffer> Buffers;
 
 	while(true){
 		//阻塞(-1)地等待注册在epoll上的listenfd上面关注的事件(这里是读事件)的发生
@@ -35,10 +43,14 @@ int main(int argc, char* argv[]){
 			int fd = events[i].data.fd;
 			if(fd == listenfd){//listenfd有读事件发生——有新连接
 				int clientfd = accept(listenfd, nullptr, nullptr);
-				if(clientfd == -1){
+				if(clientfd == -1 && errno != EAGAIN){
 					perror("accept");
 					continue;
 				}
+				//为新clientfd注册read缓冲区
+				struct fd_buffer buffer;
+				Buffers.emplace(clientfd, buffer);//C++11, 效率最高，避免拷贝
+				//Buffers.insert({clientfd, buffer})
 
 				//将clientfd注册进epoll，并设置为非阻塞
 				setNonBlock(clientfd);
@@ -47,12 +59,66 @@ int main(int argc, char* argv[]){
 
 				epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
 			}
-			else if(events[i].events & EPOLL_IN){
-				//读取并处理数据（这里需要解决粘包问题）	
+			else if(events[i].events & EPOLLIN){//条件判断：如果发生的事件是读事件
+				//读取并处理数据（这里需要解决粘包问题）
+				handleRead(fd, Buffers);
 			}
 		}
 	}
 
+	return 0;
+}
+
+int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers){
+	//设计一个最简单的协议（4字节长度 + 数据）来解决粘包问题
+	auto it = buffers.find(fd);
+	if(it == buffers.end()){
+		return -1;//错误：未找到此fd的缓冲区 TODO：为这个fd分配缓冲区后再return -1;
+	}
+
+	struct fd_buffer& buf = it->second;
+	size_t remaining = sizeof(buf.data) - buf.length - 1;
+	if(remaining <= 0) return -1;//空间不足
+
+	ssize_t len = read(fd, buf.data + buf.length, remaining);
+	if(len < 0){
+		if(errno == EAGAIN || errno == EWOULDBLOCK) return 0;//非阻塞模式下暂无数据
+
+		perror("read");
+		return -1;
+	}else if(len == 0){
+		std::cout << fd << "关闭了连接" << std::endl;
+		return 0;
+	}
+
+	buf.length += len;
+	buf.data[length] = '\0';
+
+	int total_len = 0;
+	//读取缓冲区，看看现在能不能读出有效数据
+	while(buf.length > 4){
+		//解析消息长度
+		int msg_len = *(int *)(buf.data);//TODO:处理字节序问题
+
+		//检查长度是否合法
+		if(msg_len < 0 | msg_len > 1024){
+			//清空缓冲区，避免死循环
+			buf.length = 0;
+			return -1;
+		}
+
+		//判断能否组成完整消息
+		int total_need = 4 + msg_len;//4字节头 + 数据体
+		if(buf.length < total_need) break;
+
+		//读取完整消息
+		std::cout << "读取完整消息，长度:" << msg_len << std::endl;
+		//处理消息，写回或者回复
+
+		//移除已处理消息
+		memmove(buf.data, buf.data + total_need, buf.length - total_need);
+		buf.length -= total_need;
+	}
 	return 0;
 }
 
