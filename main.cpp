@@ -5,17 +5,22 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <unordered_map>
-
-int init_server(int port);
-int setNonBlock(int fd);
-int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers);
+#include <fcntl.h>
+#include <errno.h>
 
 struct fd_buffer{
 	size_t length;
 	char data[1024];
 };
 
+int init_server(int port);
+int setNonBlock(int fd);
+int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers);
+
 int main(int argc, char* argv[]){
+	
+	std::cout << "usage: server [port]" << std::endl;
+	if(argc < 1 | argc > 1) return -1;
 	int listenfd = init_server(atoi(argv[1]));
 
 	//创建epoll句柄
@@ -42,8 +47,11 @@ int main(int argc, char* argv[]){
 
 			int fd = events[i].data.fd;
 			if(fd == listenfd){//listenfd有读事件发生——有新连接
-				int clientfd = accept(listenfd, nullptr, nullptr);
-				if(clientfd == -1 && errno != EAGAIN){
+				struct sockaddr_in client_addr;
+				socklen_t client_len = sizeof(client_addr);//必须初始化
+
+				int clientfd = accept(listenfd, (struct sockaddr*)&client_addr, &client_len);//后两个参数填nullptr会出错
+				if(clientfd == -1){
 					perror("accept");
 					continue;
 				}
@@ -92,13 +100,13 @@ int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers){
 	}
 
 	buf.length += len;
-	buf.data[length] = '\0';
+	buf.data[buf.length] = '\0';
 
 	int total_len = 0;
 	//读取缓冲区，看看现在能不能读出有效数据
-	while(buf.length > 4){
+	while(buf.length >= 4){
 		//解析消息长度
-		int msg_len = *(int *)(buf.data);//TODO:处理字节序问题
+		int msg_len = ntohl(*(int *)(buf.data));//处理字节序问题
 
 		//检查长度是否合法
 		if(msg_len < 0 | msg_len > 1024){
@@ -114,6 +122,10 @@ int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers){
 		//读取完整消息
 		std::cout << "读取完整消息，长度:" << msg_len << std::endl;
 		//处理消息，写回或者回复
+		char* msg_body = buf.data + 4;
+		size_t msg_body_len = msg_len;
+		write(fd, msg_body, msg_body_len);//写回
+		//当然也可以将msg_body和它的size传入一个函数去switch或者其他方式来识别然后回复
 
 		//移除已处理消息
 		memmove(buf.data, buf.data + total_need, buf.length - total_need);
@@ -139,7 +151,7 @@ int init_server(int port){
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = port;
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     if(bind(listenfd, (sockaddr*)&addr, sizeof(addr)) == -1){
@@ -150,6 +162,11 @@ int init_server(int port){
 
     //将listenfd设为非阻塞
     setNonBlock(listenfd);
+
+	if(listen(listenfd, 5) == -1){
+		perror("listen");
+		return -1;
+	}
 
     return listenfd;
 }
