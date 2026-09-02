@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <fcntl.h>
 #include <errno.h>
+#include <cstdlib>
+#include <arpa/inet.h>
 
 struct fd_buffer{
 	size_t length;
@@ -18,9 +20,10 @@ int setNonBlock(int fd);
 int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers);
 
 int main(int argc, char* argv[]){
-	
-	std::cout << "usage: server [port]" << std::endl;
-	if(argc < 1 | argc > 1) return -1;
+	if(argc < 2 || argc > 2){
+		std::cout << "usage: server [port]" << std::endl;
+		return -1;
+	}
 	int listenfd = init_server(atoi(argv[1]));
 
 	//创建epoll句柄
@@ -55,6 +58,7 @@ int main(int argc, char* argv[]){
 					perror("accept");
 					continue;
 				}
+				std::cout << clientfd << "接入" << std::endl;
 				//为新clientfd注册read缓冲区
 				struct fd_buffer buffer;
 				Buffers.emplace(clientfd, buffer);//C++11, 效率最高，避免拷贝
@@ -63,13 +67,19 @@ int main(int argc, char* argv[]){
 				//将clientfd注册进epoll，并设置为非阻塞
 				setNonBlock(clientfd);
 				ev.data.fd = clientfd;
-				ev.events = EPOLLIN | EPOLLET;//监听读事件，设为边缘触发
+				//ev.events = EPOLLIN | EPOLLET;//监听读事件，设为边缘触发
+				ev.events = EPOLLIN;
 
 				epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
 			}
 			else if(events[i].events & EPOLLIN){//条件判断：如果发生的事件是读事件
 				//读取并处理数据（这里需要解决粘包问题）
-				handleRead(fd, Buffers);
+				ssize_t res = handleRead(fd, Buffers);
+				if(res == 2){
+					if(epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL) == -1) perror("epoll_ctl");
+					close(fd);
+					Buffers.erase(fd);
+				}
 			}
 		}
 	}
@@ -96,20 +106,22 @@ int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers){
 		return -1;
 	}else if(len == 0){
 		std::cout << fd << "关闭了连接" << std::endl;
-		return 0;
+		return 2;
 	}
 
 	buf.length += len;
 	buf.data[buf.length] = '\0';
 
-	int total_len = 0;
 	//读取缓冲区，看看现在能不能读出有效数据
 	while(buf.length >= 4){
 		//解析消息长度
-		int msg_len = ntohl(*(int *)(buf.data));//处理字节序问题
+		//int msg_len = ntohl(*(int *)(buf.data));//处理字节序问题
+		int msg_len;
+		memcpy(&msg_len, buf.data, 4);
+		msg_len = ntohl(msg_len);
 
 		//检查长度是否合法
-		if(msg_len < 0 | msg_len > 1024){
+		if(msg_len < 0 || msg_len > 1024){
 			//清空缓冲区，避免死循环
 			buf.length = 0;
 			return -1;
@@ -124,7 +136,28 @@ int handleRead(int fd, std::unordered_map<int, fd_buffer>& buffers){
 		//处理消息，写回或者回复
 		char* msg_body = buf.data + 4;
 		size_t msg_body_len = msg_len;
-		write(fd, msg_body, msg_body_len);//写回
+		
+		//构造完整的消息包
+		int total_len = 4 + msg_body_len;
+		char* response = new char[total_len];
+
+		//写入消息头
+		int net_len = htonl(msg_body_len);
+		memcpy(response, &net_len, 4);
+
+		//写入消息体
+		memcpy(response + 4, msg_body, msg_body_len);
+
+		//发送完整消息
+		ssize_t written = write(fd, response, total_len);
+		if(written == -1){
+			perror("write");
+			delete[] response;
+			return -1;
+		}
+		//清理内存
+		delete[] response;
+
 		//当然也可以将msg_body和它的size传入一个函数去switch或者其他方式来识别然后回复
 
 		//移除已处理消息
