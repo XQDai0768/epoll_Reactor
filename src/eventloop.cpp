@@ -12,6 +12,9 @@ EventLoop::~EventLoop(){
 	if(epollfd_ != -1) close(epollfd_);	
 }
 
+/*
+	事件循环
+*/
 void EventLoop::loop(){
 
 	while(running_){
@@ -31,11 +34,17 @@ void EventLoop::loop(){
 	}
 }
 
+/*
+	终止循环
+*/
 bool EventLoop::quit(){
 	running_ = false;//wakeup机制
 	return !running_;
 }
 
+/*
+	注册或更新Channel
+*/
 int EventLoop::updateChannel(Channel* ch){
 	int fd = ch->getFd();
 	uint32_t events = ch->getEvents();
@@ -62,6 +71,9 @@ int EventLoop::updateChannel(Channel* ch){
 	return 0;
 }
 
+/*
+	注销Channel
+*/
 int EventLoop::removeChannel(Channel* ch){
 	if(epoll_ctl(epollfd_, EPOLL_CTL_DEL, ch->getFd(), nullptr) == -1){
 		perror("epoll_ctl: DEL");

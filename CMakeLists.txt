@@ -16,7 +16,7 @@ add_executable(server
 
 target_include_directories(server
 	PRIVATE
-	${CAMKE_CURRENT_SOURCE_DIR}/include
+	${CMAKE_CURRENT_SOURCE_DIR}/include
 
 )
 
