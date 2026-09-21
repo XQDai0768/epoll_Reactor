@@ -11,6 +11,7 @@
 #include <unistd.h>//write/close
 #include <cerrno>//errno
 #include "buffer.h"
+#include <string>
 
 class Channel;
 class EventLoop;
@@ -23,13 +24,15 @@ private:
 	Buffer outputBuffer_;
 	EventLoop* loop_;
 	std::function<void()> closeCallback_;
+	std::function<void(const std::string&)> messageCallback_;
 public:
 	TcpConnection(EventLoop* loop, int clientfd);
 	~TcpConnection();
 	int readData();
 	void writeData();
-	int send(const char* data, size_t len);
+	int send(const std::string& data, size_t len);
 	void closeConnection();
 	void setCloseCallback(std::function<void()> func);
 	int getFd() const;
+	void setMessageCallback(std::function<void(const std::string&)> func);
 };

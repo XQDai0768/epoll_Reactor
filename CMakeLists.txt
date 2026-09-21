@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(epoll_Reactor VERSION 1.0 LANGUAGES CXX)
+project(tcp_server VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(Threads REQUIRED)
 
 add_executable(server 
 	src/main.cpp
@@ -12,6 +14,8 @@ add_executable(server
 	src/eventloop.cpp
 	src/acceptor.cpp
 	src/tcp_connection.cpp
+	src/tcp_server.cpp
+	src/thread_pool.cpp
 )
 
 target_include_directories(server
@@ -21,3 +25,5 @@ target_include_directories(server
 )
 
 target_compile_options(server PRIVATE -Wall -Wextra -Wpedantic)
+
+target_link_libraries(server PRIVATE Threads::Threads)

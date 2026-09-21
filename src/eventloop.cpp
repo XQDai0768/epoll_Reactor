@@ -4,12 +4,26 @@
 EventLoop::EventLoop(){
 	epollfd_ = epoll_create1(EPOLL_CLOEXEC);
 	if(epollfd_ == -1) perror("epoll_create:");
+
 	events_.resize(1024);
 	running_ = true;
+
+	eventfd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+	if(eventfd_ == -1) perror("eventfd:");
+
+	//注册eventfd_
+	struct epoll_event ev = {};
+	ev.events = EPOLLIN;
+	ev.data.fd = eventfd_;
+
+	if(epoll_ctl(epollfd_, EPOLL_CTL_ADD, eventfd_, &ev) == -1)
+		perror("eventfd epoll_ctl:");
 }
 
 EventLoop::~EventLoop(){
 	if(epollfd_ != -1) close(epollfd_);	
+
+	if(eventfd_ != - 1) close(eventfd_);
 }
 
 /*
@@ -17,7 +31,21 @@ EventLoop::~EventLoop(){
 */
 void EventLoop::loop(){
 
+	std::vector<std::function<void()>> local_;
+
 	while(running_){
+		
+		//先清理一次 [锁内交换，锁外执行]！！！
+		{
+			std::lock_guard<std::mutex> lock(mtx_);
+			local_.swap(pendingTasks_);
+			pendingTasks_.clear();
+		}
+		for(auto task : local_){
+			task();
+		}
+		local_.clear();
+
 		int n = epoll_wait(epollfd_, events_.data(), events_.size(), -1);
 
 		if(n == -1){
@@ -27,10 +55,31 @@ void EventLoop::loop(){
 		}
 
 		for(int i = 0; i < n; i++){
+			
+			if(events_[i].data.fd == eventfd_){
+				uint64_t val;
+				ssize_t n = read(eventfd_, &val, sizeof(val));
+				if(n == -1){
+					perror("eventfd read:");
+				}
+				continue;
+			}
+
 			Channel* ch = static_cast<Channel*>(events_[i].data.ptr);
 			uint32_t revents = events_[i].events;
 			ch->handleEvent(revents);
 		}
+
+		//关闭失效连接
+		{
+			std::lock_guard<std::mutex> lock(mtx_);
+			local_.swap(pendingTasks_);
+			pendingTasks_.clear();
+		}
+		for(auto task : local_){
+			task();
+		}
+		local_.clear();
 	}
 }
 
@@ -38,8 +87,30 @@ void EventLoop::loop(){
 	终止循环
 */
 bool EventLoop::quit(){
-	running_ = false;//wakeup机制
+	running_ = false;
+
+	uint64_t one = 1;
+	ssize_t n = write(eventfd_, &one, sizeof(one));
+	if(n == -1){
+		perror("eventfd write:");
+		return false;
+	}
+
 	return !running_;
+}
+
+void EventLoop::runInLoop(std::function<void()> task){
+	{
+		std::lock_guard<std::mutex> lock(mtx_);
+		pendingTasks_.emplace_back(task);
+	}
+
+	//让阻塞在 epoll_wait/poll/read 上的线程醒过来
+	uint64_t one = 1;
+	ssize_t n = write(eventfd_, &one, sizeof(one));
+	if(n == -1){
+		perror("eventfd write:");
+	}
 }
 
 /*

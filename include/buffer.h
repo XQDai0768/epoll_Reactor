@@ -10,6 +10,7 @@
 #include <unistd.h>//read()
 #include <arpa/inet.h>//ntohl
 #include <sys/types.h>//ssize_t
+#include <string>
 
 enum class ReturnResult{
 	Again,
@@ -32,7 +33,7 @@ public:
 	size_t prependableBytes() const;
 	const char* peek() const;
 
-	int append(const char* data, size_t len);
+	int append(const std::string data, size_t len);
 	int ensureWritableBytes(size_t len);
 	ReturnResult readFd(int fd);
 

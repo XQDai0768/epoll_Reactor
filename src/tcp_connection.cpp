@@ -39,6 +39,7 @@ int TcpConnection::readData(){
 	
 	if(res == ReturnResult::Closed || res == ReturnResult::Error){
 		closeConnection();
+		return -1;
 	}
 	else{
 		while(inputBuffer_.readableBytes() >= 4){
@@ -56,15 +57,16 @@ int TcpConnection::readData(){
 			if(inputBuffer_.readableBytes() < total_need) break;
 
 			//读取消息
-			//char* data = new char[msg_len];
-			//std::unique_ptr<char[]> data(new char[total_need]);
-			//std::memcpy(data.get(), inputBuffer_.peek(), total_need);
+			std::string request(inputBuffer_.peek() + 4, msg_len);
 
-			std::cout << "读取长度为" << msg_len << "的消息:" << std::endl;
+			std::cout << "读取长度为" << msg_len << "的消息:" << request << std::endl;
 
 			//处理消息
-			send(inputBuffer_.peek(), total_need);
-			//delete[] data;
+			if(messageCallback_) messageCallback_(request);
+			else{
+				inputBuffer_.retrieve(total_need);
+				return -1;
+			}
 
 			inputBuffer_.retrieve(total_need);
 		}
@@ -86,26 +88,21 @@ void TcpConnection::writeData(){
 		else if(outputBuffer_.readableBytes() == 0) channel_->disableWriting();
 		else if(written == -1 && errno == EAGAIN) channel_->enableWriting();
 		else if(written == -1 && errno == EINTR) continue;
-		else if(written == 0) break;
+		else if(written == 0) channel_->enableWriting();
 		else closeConnection();
 		break;
 	}
 }
 
-int TcpConnection::send(const char* data, size_t len){
+int TcpConnection::send(const std::string& data, size_t len){
+	if(clientfd_ == -1) return -1;
+
 	if(outputBuffer_.append(data, len) == -1){
 		std::cout << "Error:append()" << std::endl;
 		return -1;
 	}
 
 	writeData();
-
-	/*
-	if(channel_->enableWriting() == -1){
-		std::cout << "Error:enableWriting()" << std::endl;
-		return -1;
-	}
-	*/
 
 	return 0;
 }
@@ -122,6 +119,10 @@ void TcpConnection::closeConnection(){
 
 void TcpConnection::setCloseCallback(std::function<void()> func){
 	closeCallback_ = func;
+}
+
+void TcpConnection::setMessageCallback(std::function<void(const std::string&)> func){
+	messageCallback_ = func;
 }
 
 int TcpConnection::getFd() const{

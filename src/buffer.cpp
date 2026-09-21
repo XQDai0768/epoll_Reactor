@@ -37,13 +37,12 @@ const char* Buffer::peek() const{
 /*
 	把数据追加到可写区，写指针后移
 */
-int Buffer::append(const char* data, size_t len){
-	if(data == nullptr || len == 0) return -1;
+int Buffer::append(const std::string data, size_t len){
+	if(len == 0) return -1;
 
 	ensureWritableBytes(len);
 
-	//for(size_t i  = 0; i < len; i++) buffer_[i + writeIndex_] = data[i];
-	memcpy(buffer_.data() + writeIndex_, data, len);
+	memcpy(buffer_.data() + writeIndex_, data.data(), len);
 	writeIndex_ += len;
 
 	return 0;
@@ -88,37 +87,7 @@ ReturnResult Buffer::readFd(int fd){
 		ssize_t len = read(fd, buffer_.data() + writeIndex_, writableBytes());
 
 		if(len > 0){
-			//total_read += len;
-			writeIndex_ += len;
-
-			/*
-			//处理粘包和拆包问题
-			while(writeIndex_ - readIndex_ >= 4){
-				int msg_len;
-				memcpy(&msg_len, buffer_.data() + readIndex_, 4);
-				msg_len = ntohl(msg_len);
-
-				//检查长度是否合法
-				if(msg_len < 0 || msg_len > 65536){
-					retrieveAll();
-					return -1;
-				}
-
-				int total_need = 4 + msg_len;
-				if(writeIndex_ - readIndex_ < total_need) break;
-
-				//读取消息
-				std::vector<char> data(buffer_.begin() + readIndex_ + 4,
-									buffer_.begin() + readIndex_ + 4 + msg_len);
-
-				std::cout << "读取长度为" << msg_len << "的消息：" << std::endl;
-				std::cout << data << std::endl;//bug
-
-				//TODO:处理消息
-
-				readIndex_ += total_need;
-			}
-			*/
+			writeIndex_ += len;			
 		}
 		else if(len == 0){
 			std::cout << fd << "关闭了连接" << std::endl;

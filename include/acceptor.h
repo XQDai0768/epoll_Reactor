@@ -27,10 +27,12 @@ private:
 	uint16_t port_;//监听端口
 	bool listening_;//是否已监听，防止重复监听
 	int setNonBlock(int fd);
+	bool running_;
 public:
 	Acceptor(EventLoop* loop, uint16_t port);
 	~Acceptor();
 	int listen();
 	int handleRead();
 	void setNewConnectionCallback(std::function<void(int)> func);
+	void stop();
 };

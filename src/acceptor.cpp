@@ -7,6 +7,7 @@ Acceptor::Acceptor(EventLoop* loop, uint16_t port){
 	port_ = port;
 	listenfd_ = -1;
 	listening_ = false;
+	running_ = true;
 }
 
 Acceptor::~Acceptor(){
@@ -88,7 +89,7 @@ int Acceptor::setNonBlock(int fd){
 }
 
 int Acceptor::handleRead(){
-	while(true){
+	while(running_){
 		struct sockaddr_in client_addr;
 		socklen_t client_len = sizeof(client_addr);
 		int clientfd = accept(listenfd_, (struct sockaddr*)&client_addr, &client_len);
@@ -117,4 +118,17 @@ int Acceptor::handleRead(){
 
 void Acceptor::setNewConnectionCallback(std::function<void(int)> func){
 	newConnectionCallback_ = func;
+}
+
+void Acceptor::stop(){
+	if(listenfd_ == -1) return;
+
+	running_ = false;
+
+	acceptChannel_->remove();
+
+	close(listenfd_);
+	listenfd_ = -1;
+
+	acceptChannel_ = nullptr;
 }
