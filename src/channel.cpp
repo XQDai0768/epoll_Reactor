@@ -59,9 +59,10 @@ void Channel::setIndex(int value){
 /*
 	加入读事件
 */
-int Channel::enableReading(){
-	//events_ |= EPOLLIN;
-	events_ |= EPOLLIN | EPOLLET;//加入边缘触发
+int Channel::enableReading(bool flag_ET){
+	if(flag_ET) events_ |= EPOLLIN | EPOLLET;//加入边缘触发
+	else events_ |= EPOLLIN;
+	
 	return update();
 }
 

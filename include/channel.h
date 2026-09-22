@@ -33,7 +33,7 @@ public:
 	int getIndex() const;
 	void setIndex(int value);
 
-	int enableReading();
+	int enableReading(bool flag_ET = true);
 	int enableWriting();
 	int disableReading();
 	int disableWriting();
