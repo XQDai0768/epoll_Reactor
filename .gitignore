@@ -4,3 +4,5 @@ build/
 #agent相关
 *.md
 !README.md
+
+.DS_Store
