@@ -18,6 +18,8 @@ EventLoop::EventLoop(){
 
 	if(epoll_ctl(epollfd_, EPOLL_CTL_ADD, eventfd_, &ev) == -1)
 		perror("eventfd epoll_ctl:");
+
+	timer_ = std::make_unique<TimerQueue>(this);
 }
 
 EventLoop::~EventLoop(){
@@ -152,4 +154,16 @@ int EventLoop::removeChannel(Channel* ch){
 	}
 	ch->setIndex(-1);
 	return 0;
+}
+
+void EventLoop::addTimer(Duration delay, std::function<void()> func){
+	timer_.addTimer(delay, func);
+}
+
+void EventLoop::addTimer(Duration delay, Duration interval, std::function<void()> func){
+	timer_.addTimer(delay, interval, func);
+}
+
+void EventLoop::cancelTimer(std::uint64_t id){
+	timer_.cancelTimer(id);
 }

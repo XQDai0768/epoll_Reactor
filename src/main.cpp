@@ -23,8 +23,6 @@ int main(int argc, char* argv[]){
 	//忽略SIGPIPE信号
 	std::signal(SIGPIPE, SIG_IGN);
 
-	
-
 	std::unique_ptr<EventLoop> loop = std::make_unique<EventLoop>();
 	std::unique_ptr<TcpServer> tcp_server = std::make_unique<TcpServer>(loop.get(), atoi(argv[1]));
 

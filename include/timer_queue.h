@@ -9,6 +9,7 @@
 #include <map>
 #include <unordered_map>
 #include <cstring>
+#include <unistd.h>
 
 using Clock = std::chrono::steady_clock;
 using TimePoint = Clock::time_point;
@@ -29,17 +30,17 @@ private:
     int timer_fd_;
     EventLoop* loop_;
     std::unique_ptr<Channel> timerChannel_;
-    size_t id_count_;//计时器ID计数器
+    std::int64_t id_count_;//计时器ID计数器
     std::multimap<TimePoint, std::uint64_t> tasks_;
     std::unordered_map<std::uint64_t, Timer> timers_;
 public:
     TimerQueue(EventLoop* loop);
     ~TimerQueue();
-    int addTimer(Duration delay, std::function<void()> func);
-    int addTimer(Duration delay, Duration interval, std::function<void()> func);
+    std::uint64_t addTimer(Duration delay, std::function<void()> func);
+    std::uint64_t addTimer(Duration delay, Duration interval, std::function<void()> func);
     int cancelTimer(std::uint64_t id);
     void readCallback();
-    void start(Duration expire_time);
-    void stop();
+    int start(Duration expire_time);
+    int stop();
     void check();
 };

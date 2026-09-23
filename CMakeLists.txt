@@ -16,6 +16,7 @@ add_executable(server
 	src/tcp_connection.cpp
 	src/tcp_server.cpp
 	src/thread_pool.cpp
+	src/timer_queue.cpp
 )
 
 target_include_directories(server

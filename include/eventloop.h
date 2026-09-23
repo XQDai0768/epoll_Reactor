@@ -13,6 +13,7 @@
 #include <sys/eventfd.h>
 #include <stdint.h>//uint64_t
 #include <atomic>
+#include "timer_queue.h"
 
 class Channel;
 
@@ -24,6 +25,7 @@ private:
 	std::atomic<bool> running_;//循环是否继续，quit()时置false
 	int eventfd_;
 	std::mutex mtx_;
+	std::unique_ptr<TimerQueue> timer_;
 public:
 	EventLoop();
 	~EventLoop();
@@ -32,4 +34,7 @@ public:
 	int updateChannel(Channel* ch);
 	int removeChannel(Channel* ch);
 	void runInLoop(std::function<void()> task);
+	void addTimer(Duration delay, std::function<void()> func);
+    void addTimer(Duration delay, Duration interval, std::function<void()> func);
+    void cancelTimer(std::uint64_t id);
 };
