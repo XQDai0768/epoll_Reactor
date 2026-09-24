@@ -4,7 +4,7 @@
 
 TimerQueue::TimerQueue(EventLoop* loop){
 
-    id_count_ = 0;
+    id_count_ = UINT64_MAX;
 
     //创建tfd
     timer_fd_ = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);

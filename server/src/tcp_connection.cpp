@@ -39,9 +39,9 @@ TcpConnection::~TcpConnection(){
 		clientfd_ = -1;
 	}
 
-	if(timer_id_ != 0){
+	if(timer_id_ != UINT64_MAX){
 		loop_->cancelTimer(timer_id_);
-		timer_id_ = 0;
+		timer_id_ = UINT64_MAX;
 	}
 }
 
@@ -132,9 +132,9 @@ void TcpConnection::closeConnection(){
 	close(clientfd_);
 	clientfd_ = -1;
 
-	if(timer_id_ != 0){
+	if(timer_id_ != UINT64_MAX){
 		loop_->cancelTimer(timer_id_);
-		timer_id_ = 0;
+		timer_id_ = UINT64_MAX;
 	} 
 
 	if(closeCallback_) closeCallback_();
