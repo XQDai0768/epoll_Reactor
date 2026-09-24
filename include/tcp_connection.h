@@ -12,6 +12,7 @@
 #include <cerrno>//errno
 #include "buffer.h"
 #include <string>
+#include <chrono>
 
 class Channel;
 class EventLoop;
@@ -25,6 +26,7 @@ private:
 	EventLoop* loop_;
 	std::function<void()> closeCallback_;
 	std::function<void(const std::string&)> messageCallback_;
+	std::uint64_t timer_id_;
 public:
 	TcpConnection(EventLoop* loop, int clientfd);
 	~TcpConnection();

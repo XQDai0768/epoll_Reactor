@@ -156,14 +156,14 @@ int EventLoop::removeChannel(Channel* ch){
 	return 0;
 }
 
-void EventLoop::addTimer(Duration delay, std::function<void()> func){
-	timer_.addTimer(delay, func);
+uint64_t EventLoop::addTimer(Duration delay, std::function<void()> func){
+	return timer_->addTimer(delay, func);
 }
 
-void EventLoop::addTimer(Duration delay, Duration interval, std::function<void()> func){
-	timer_.addTimer(delay, interval, func);
+uint64_t EventLoop::addTimer(Duration delay, Duration interval, std::function<void()> func){
+	return timer_->addTimer(delay, interval, func);
 }
 
 void EventLoop::cancelTimer(std::uint64_t id){
-	timer_.cancelTimer(id);
+	timer_->cancelTimer(id);
 }

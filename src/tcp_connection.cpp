@@ -1,11 +1,13 @@
 #include "tcp_connection.h"
 #include "buffer.h"
 #include "channel.h"
+#include "eventloop.h"
 
 TcpConnection::TcpConnection(EventLoop* loop, int clientfd){
 	clientfd_ = clientfd;
 	loop_ = loop;
 	channel_ = std::make_unique<Channel>(loop_, clientfd_);
+	timer_id_ = 0;
 
 	channel_->setReadCallback([this](){
 		readData();
@@ -24,6 +26,10 @@ TcpConnection::TcpConnection(EventLoop* loop, int clientfd){
 		closeConnection();
 	}
 
+	timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
+		std::cout << "Connection overtime" << std::endl;
+		closeConnection();
+	});
 }
 
 TcpConnection::~TcpConnection(){
@@ -31,6 +37,11 @@ TcpConnection::~TcpConnection(){
 		channel_->remove();
 		close(clientfd_);
 		clientfd_ = -1;
+	}
+
+	if(timer_id_ != 0){
+		loop_->cancelTimer(timer_id_);
+		timer_id_ = 0;
 	}
 }
 
@@ -60,6 +71,13 @@ int TcpConnection::readData(){
 			std::string request(inputBuffer_.peek() + 4, msg_len);
 
 			std::cout << "读取长度为" << msg_len << "的消息:" << request << std::endl;
+
+			//重置定时器
+			if(timer_id_ != 0) loop_->cancelTimer(timer_id_);
+			timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
+				std::cout << "Connection Timeout" << std::endl;
+				closeConnection();
+			});
 
 			//处理消息
 			if(messageCallback_) messageCallback_(request);
@@ -113,6 +131,11 @@ void TcpConnection::closeConnection(){
 	channel_->remove();
 	close(clientfd_);
 	clientfd_ = -1;
+
+	if(timer_id_ != 0){
+		loop_->cancelTimer(timer_id_);
+		timer_id_ = 0;
+	} 
 
 	if(closeCallback_) closeCallback_();
 }

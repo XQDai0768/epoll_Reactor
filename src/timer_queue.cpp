@@ -46,7 +46,7 @@ std::uint64_t TimerQueue::addTimer(Duration delay, std::function<void()> func){
     t.id = id_count_;
     t.expireTime = expire;
     t.periodic = false;
-    //t.interval = 0;
+    t.interval = Duration::zero();
     t.callback = func;
 
     timers_.insert({id_count_, t});

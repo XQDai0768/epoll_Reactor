@@ -34,7 +34,7 @@ public:
 	int updateChannel(Channel* ch);
 	int removeChannel(Channel* ch);
 	void runInLoop(std::function<void()> task);
-	void addTimer(Duration delay, std::function<void()> func);
-    void addTimer(Duration delay, Duration interval, std::function<void()> func);
+	uint64_t addTimer(Duration delay, std::function<void()> func);
+    uint64_t addTimer(Duration delay, Duration interval, std::function<void()> func);
     void cancelTimer(std::uint64_t id);
 };
