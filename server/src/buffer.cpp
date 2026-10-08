@@ -37,12 +37,16 @@ const char* Buffer::peek() const{
 /*
 	把数据追加到可写区，写指针后移
 */
-int Buffer::append(const std::string data, size_t len){
+int Buffer::append(const std::string& data, size_t len){
+	return append(data.data(), len);
+}
+
+int Buffer::append(const void* data, size_t len){
 	if(len == 0) return -1;
 
 	ensureWritableBytes(len);
 
-	memcpy(buffer_.data() + writeIndex_, data.data(), len);
+	memcpy(buffer_.data() + writeIndex_, data, len);
 	writeIndex_ += len;
 
 	return 0;

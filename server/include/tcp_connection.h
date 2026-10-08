@@ -13,6 +13,7 @@
 #include "buffer.h"
 #include <string>
 #include <chrono>
+#include "rpc_codec.h"
 
 class Channel;
 class EventLoop;
@@ -25,16 +26,17 @@ private:
 	Buffer outputBuffer_;
 	EventLoop* loop_;
 	std::function<void()> closeCallback_;
-	std::function<void(const std::string&)> messageCallback_;
+	std::function<void(const rpc::RpcMessage&)> messageCallback_;
 	std::uint64_t timer_id_;
+	RpcCodec codec_;
 public:
 	TcpConnection(EventLoop* loop, int clientfd);
 	~TcpConnection();
 	int readData();
 	void writeData();
-	int send(const std::string& data, size_t len);
+	int send(const rpc::RpcMessage&);
 	void closeConnection();
 	void setCloseCallback(std::function<void()> func);
 	int getFd() const;
-	void setMessageCallback(std::function<void(const std::string&)> func);
+	void setMessageCallback(std::function<void(const rpc::RpcMessage&)> func);
 };

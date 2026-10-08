@@ -33,7 +33,8 @@ public:
 	size_t prependableBytes() const;
 	const char* peek() const;
 
-	int append(const std::string data, size_t len);
+	int append(const std::string& data, size_t len);
+	int append(const void* data, size_t len);
 	int ensureWritableBytes(size_t len);
 	ReturnResult readFd(int fd);
 

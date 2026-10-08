@@ -19,26 +19,21 @@ int TcpServer::start(){
 
 		std::shared_ptr<TcpConnection> tcp_ = std::make_shared<TcpConnection>(loop_, fd);
 		std::weak_ptr<TcpConnection> ptr_ = tcp_;
-		tcp_->setMessageCallback([=](const std::string& data){
+		tcp_->setMessageCallback([=](const rpc::RpcMessage& request){
 
 			thread_->submit([=](){
-				uint32_t len = static_cast<uint32_t>(data.size());
-				std::string response;
-				response.resize(4 + data.size());
-
-				//写4字节长度
-				response[0] = static_cast<char>((len >> 24) & 0xFF);
-				response[1] = static_cast<char>((len >> 16) & 0xFF);
-				response[2] = static_cast<char>((len >> 8) & 0xFF);
-				response[3] = static_cast<char>(len & 0xFF);
-
-				//写消息体
-				std::memcpy(&response[4], data.data(), data.size());
+				rpc::RpcMessage response;
+				response.set_type(rpc::MESSAGE_TYPE_RESPONSE);
+				response.set_request_id(request.request_id());
+				response.set_payload(request.payload());
+				response.set_error_code(0);
+				response.set_service(request.service());
+				response.set_method(request.method());
 
 				loop_->runInLoop([response, ptr_](){
 					auto p = ptr_.lock();
 					if(p != nullptr){
-						p->send(response, response.length());
+						p->send(response);
 					}
 				});
 

@@ -7,7 +7,7 @@ TcpConnection::TcpConnection(EventLoop* loop, int clientfd){
 	clientfd_ = clientfd;
 	loop_ = loop;
 	channel_ = std::make_unique<Channel>(loop_, clientfd_);
-	timer_id_ = 0;
+	timer_id_ = UINT64_MAX;
 
 	channel_->setReadCallback([this](){
 		readData();
@@ -53,40 +53,24 @@ int TcpConnection::readData(){
 		return -1;
 	}
 	else{
-		while(inputBuffer_.readableBytes() >= 4){
-		    uint32_t msg_len;
-			memcpy(&msg_len, inputBuffer_.peek(), 4);
-			msg_len = ntohl(msg_len);
+		while(true){
+			rpc::RpcMessage msg;
+    		ParseResult r = codec_.decode(&inputBuffer_, &msg);
+			if (r == ParseResult::kOk) {
+        		if(timer_id_ != UINT64_MAX) loop_->cancelTimer(timer_id_);
+				timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
+					std::cout << "Connection Timeout" << std::endl;
+					closeConnection();
+				});
 
-			if(msg_len > 65535){
-				inputBuffer_.retrieveAll();
-				closeConnection();
-				return -1;
-			}
-
-			size_t total_need = 4 + msg_len;
-			if(inputBuffer_.readableBytes() < total_need) break;
-
-			//读取消息
-			std::string request(inputBuffer_.peek() + 4, msg_len);
-
-			std::cout << "读取长度为" << msg_len << "的消息:" << request << std::endl;
-
-			//重置定时器
-			if(timer_id_ != 0) loop_->cancelTimer(timer_id_);
-			timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
-				std::cout << "Connection Timeout" << std::endl;
-				closeConnection();
-			});
-
-			//处理消息
-			if(messageCallback_) messageCallback_(request);
-			else{
-				inputBuffer_.retrieve(total_need);
-				return -1;
-			}
-
-			inputBuffer_.retrieve(total_need);
+        		if (messageCallback_) messageCallback_(msg);
+        		continue;             // 继续解，处理粘包
+    		} 
+			else if (r == ParseResult::kNeedMore) break;     // 数据不够，等下次读
+			else {
+        		closeConnection();    // kInvalidLength / kParseError
+        		return -1;
+    		}
 		}
 	}
 	return 0;
@@ -112,14 +96,10 @@ void TcpConnection::writeData(){
 	}
 }
 
-int TcpConnection::send(const std::string& data, size_t len){
+int TcpConnection::send(const rpc::RpcMessage& msg){
 	if(clientfd_ == -1) return -1;
 
-	if(outputBuffer_.append(data, len) == -1){
-		std::cout << "Error:append()" << std::endl;
-		return -1;
-	}
-
+	codec_.encode(msg, &outputBuffer_);
 	writeData();
 
 	return 0;
@@ -144,7 +124,7 @@ void TcpConnection::setCloseCallback(std::function<void()> func){
 	closeCallback_ = func;
 }
 
-void TcpConnection::setMessageCallback(std::function<void(const std::string&)> func){
+void TcpConnection::setMessageCallback(std::function<void(const rpc::RpcMessage&)> func){
 	messageCallback_ = func;
 }
 

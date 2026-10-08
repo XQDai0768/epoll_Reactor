@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package rpc;
+
+// RPC 消息类型
+enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED = 0;  // 未指定（默认值）
+    MESSAGE_TYPE_REQUEST     = 1;  // 请求
+    MESSAGE_TYPE_RESPONSE    = 2;  // 响应
+    MESSAGE_TYPE_HEARTBEAT   = 3;  // 心跳
+}
+
+// RPC 统一消息信封
+message RpcMessage {
+    MessageType type       = 1;  // 消息类型
+    uint64      request_id = 2;  // 请求 ID，用于关联请求与响应
+    string      service    = 3;  // 服务名，如 "myapp.user.UserService"
+    string      method     = 4;  // 方法名，如 "GetUser"
+    bytes       payload    = 5;  // 序列化后的业务数据
+    int32       error_code = 6;  // 错误码，0 表示成功
+}
