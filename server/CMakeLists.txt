@@ -55,6 +55,9 @@ add_executable(server
 	src/thread_pool.cpp
 	src/timer_queue.cpp
 	src/rpc_codec.cpp
+	src/service.cpp
+	src/echo_service.cpp
+	src/dispathcer.cpp
 )
 
 target_include_directories(server

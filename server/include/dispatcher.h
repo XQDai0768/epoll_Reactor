@@ -10,5 +10,5 @@ public:
     Dispatcher();
     ~Dispatcher() = default;
     void registerService(Service* svc);                     // 塞进 map
-    void dispatch(const RpcMessage& req, RpcMessage* resp); // 查 service -> 调 callMethod
+    void dispatch(const rpc::RpcMessage& req, rpc::RpcMessage* resp); // 查 service -> 调 callMethod
 };
