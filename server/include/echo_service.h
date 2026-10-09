@@ -2,10 +2,6 @@
 
 #include "service.h"
 
-constexpr int kOk = 0;
-constexpr int kServiceNotFound = 1;
-constexpr int kMethodNotFound = 2;
-
 class EchoService : public Service{
 public:
     EchoService();

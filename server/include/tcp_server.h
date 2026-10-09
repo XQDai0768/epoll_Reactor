@@ -7,6 +7,8 @@
 #include "acceptor.h"
 #include <iostream>
 #include "thread_pool.h"
+#include "dispatcher.h"
+#include "echo_service.h"
 
 class EventLoop;
 class ThreadPool;
@@ -18,6 +20,8 @@ private:
 	EventLoop* loop_;
 	std::unique_ptr<ThreadPool> thread_;
 	bool running_;
+	Dispatcher dispatcher_;
+	std::unique_ptr<EchoService> echo_service_;   
 public:
 	TcpServer(EventLoop* loop, uint16_t port);
 	~TcpServer();

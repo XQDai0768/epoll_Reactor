@@ -1,5 +1,6 @@
-// 最简单的 RPC 客户端：连上服务端，发一条 RpcMessage，收一条响应
+// 最简单的 RPC 客户端：连上服务端，发一条 EchoRequest，收一条 EchoResponse
 #include "service.pb.h"
+#include "echo.pb.h"
 #include "buffer.h"
 #include "rpc_codec.h"
 
@@ -41,21 +42,27 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // 1. 构造请求
+    // 1. 构造业务请求
+    rpc::EchoRequest echo_req;
+    echo_req.set_text("hello rpc");
+    std::string payload;
+    echo_req.SerializeToString(&payload);
+
+    // 2. 装进信封
     rpc::RpcMessage req;
     req.set_type(rpc::MESSAGE_TYPE_REQUEST);
     req.set_request_id(1);
-    req.set_service("demo.Service");
+    req.set_service("EchoService");
     req.set_method("Echo");
-    req.set_payload("hello rpc");
+    req.set_payload(payload);
     req.set_error_code(0);
 
-    // 2. 编码：4 字节长度头 + protobuf
+    // 3. 编码：4 字节长度头 + protobuf
     Buffer sendBuf;
     RpcCodec codec;
     codec.encode(req, &sendBuf);
 
-    // 3. 发送（循环发，确保发完）
+    // 4. 发送（循环发，确保发完）
     size_t sent = 0;
     while (sent < sendBuf.readableBytes()) {
         ssize_t n = send(fd, sendBuf.peek() + sent, sendBuf.readableBytes() - sent, 0);
@@ -64,7 +71,7 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "已发送请求 (" << sent << " 字节)\n";
 
-    // 4. 接收并解码（循环读，处理响应半包）
+    // 5. 接收并解码（循环读，处理响应半包）
     Buffer recvBuf;
     rpc::RpcMessage resp;
     while (true) {
@@ -77,7 +84,16 @@ int main(int argc, char* argv[]) {
 
         ParseResult pr = codec.decode(&recvBuf, &resp);
         if (pr == ParseResult::kOk) {
-            std::cout << "收到响应:\n" << resp.DebugString();
+            if (resp.error_code() != 0) {
+                std::cout << "服务端返回错误码: " << resp.error_code() << "\n";
+            } else {
+                rpc::EchoResponse echo_resp;
+                if (echo_resp.ParseFromString(resp.payload())) {
+                    std::cout << "回显内容: " << echo_resp.text() << "\n";
+                } else {
+                    std::cout << "解析 EchoResponse 失败\n";
+                }
+            }
             break;
         } else if (pr == ParseResult::kNeedMore) {
             continue;

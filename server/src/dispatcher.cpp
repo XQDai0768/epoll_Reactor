@@ -1,4 +1,5 @@
 #include "dispatcher.h"
+#include "error_code.h"
 
 void Dispatcher::registerService(Service* svc){
     services_.insert({svc->name(), svc});

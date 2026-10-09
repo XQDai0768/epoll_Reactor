@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package rpc;
+
+message EchoRequest  { 
+    string text = 1; 
+}
+
+message EchoResponse {
+    string text = 1; 
+}

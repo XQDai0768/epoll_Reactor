@@ -34,7 +34,7 @@ protobuf_generate(
     APPEND_PATH
     OUT_VAR PROTO_SRCS
     PROTOC_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    PROTOS proto/service.proto
+    PROTOS proto/service.proto proto/echo.proto
 )
 
 add_library(proto_lib STATIC ${PROTO_SRCS})
@@ -57,13 +57,12 @@ add_executable(server
 	src/rpc_codec.cpp
 	src/service.cpp
 	src/echo_service.cpp
-	src/dispathcer.cpp
+	src/dispatcher.cpp
 )
 
 target_include_directories(server
 	PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
-
 )
 
 target_compile_options(server PRIVATE -Wall -Wextra -Wpedantic)
@@ -74,6 +73,6 @@ target_link_libraries(server PRIVATE Threads::Threads proto_lib)
 #add_executable(proto_test test/proto_codec_test.cpp)
 #target_link_libraries(proto_test PRIVATE proto_lib)
 
-add_executable(rpc_codec_test test/proto_codec_test.cpp src/rpc_codec.cpp src/buffer.cpp)
-target_include_directories(rpc_codec_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(rpc_codec_test PRIVATE proto_lib)
+# add_executable(rpc_codec_test test/proto_codec_test.cpp src/rpc_codec.cpp src/buffer.cpp)
+# target_include_directories(rpc_codec_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# target_link_libraries(rpc_codec_test PRIVATE proto_lib)

@@ -1,13 +1,13 @@
 #include "tcp_server.h"
 #include "eventloop.h"
-#include "dispatcher.h"
-#include "echo_service.h"
 
 TcpServer::TcpServer(EventLoop* loop, uint16_t port){
 	loop_ = loop;
 	acceptor_ = std::make_unique<Acceptor>(loop, port);
 	thread_ = std::make_unique<ThreadPool>(10);
 	running_ = true;
+	echo_service_ = std::make_unique<EchoService>();
+	dispatcher_.registerService(echo_service_.get());
 }
 
 TcpServer::~TcpServer(){
@@ -31,9 +31,7 @@ int TcpServer::start(){
 				response.set_service(request.service());
 				response.set_method(request.method());
 
-				Dispatcher dsp_;
-				dsp_.registerService(new EchoService);
-				dsp_.dispatch(request, &response);
+				dispatcher_.dispatch(request, &response);
 
 				loop_->runInLoop([response, ptr_](){
 					auto p = ptr_.lock();
