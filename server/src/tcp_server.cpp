@@ -1,5 +1,7 @@
 #include "tcp_server.h"
 #include "eventloop.h"
+#include "dispatcher.h"
+#include "echo_service.h"
 
 TcpServer::TcpServer(EventLoop* loop, uint16_t port){
 	loop_ = loop;
@@ -25,10 +27,13 @@ int TcpServer::start(){
 				rpc::RpcMessage response;
 				response.set_type(rpc::MESSAGE_TYPE_RESPONSE);
 				response.set_request_id(request.request_id());
-				response.set_payload(request.payload());
 				response.set_error_code(0);
 				response.set_service(request.service());
 				response.set_method(request.method());
+
+				Dispatcher dsp_;
+				dsp_.registerService(new EchoService);
+				dsp_.dispatch(request, &response);
 
 				loop_->runInLoop([response, ptr_](){
 					auto p = ptr_.lock();
