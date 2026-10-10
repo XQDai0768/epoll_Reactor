@@ -34,7 +34,7 @@ protobuf_generate(
     APPEND_PATH
     OUT_VAR PROTO_SRCS
     PROTOC_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    PROTOS proto/service.proto proto/echo.proto
+    PROTOS proto/service.proto proto/echo.proto proto/calculator.proto
 )
 
 add_library(proto_lib STATIC ${PROTO_SRCS})

@@ -17,5 +17,5 @@ void Service::callMethod(const std::string& method,
 }
 
 void Service::addMethod(const std::string& method, Handler handler){
-    methods_[method] = handler;
+    methods_.emplace(method, std::move(handler));
 }

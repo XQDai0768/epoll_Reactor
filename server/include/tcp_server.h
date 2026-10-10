@@ -9,6 +9,7 @@
 #include "thread_pool.h"
 #include "dispatcher.h"
 #include "echo_service.h"
+#include "calculator_service.h"
 
 class EventLoop;
 class ThreadPool;
@@ -21,7 +22,8 @@ private:
 	std::unique_ptr<ThreadPool> thread_;
 	bool running_;
 	Dispatcher dispatcher_;
-	std::unique_ptr<EchoService> echo_service_;   
+	std::unique_ptr<EchoService> echo_service_;
+	std::unique_ptr<CalculatorService> calculator_service_;
 public:
 	TcpServer(EventLoop* loop, uint16_t port);
 	~TcpServer();

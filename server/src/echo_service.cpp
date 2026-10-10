@@ -12,7 +12,7 @@ void EchoService::echo(const rpc::RpcMessage& req, rpc::RpcMessage* resp) {
     // 1. 从信封的 payload 解析出业务请求（局部变量）
     rpc::EchoRequest request;
     if (!request.ParseFromString(req.payload())) {
-        resp->set_error_code(kMethodNotFound);   // 或专门的“参数解析失败”错误码
+        resp->set_error_code(kBadRequest);   
         return;
     }
 

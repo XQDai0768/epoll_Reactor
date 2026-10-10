@@ -7,7 +7,9 @@ TcpServer::TcpServer(EventLoop* loop, uint16_t port){
 	thread_ = std::make_unique<ThreadPool>(10);
 	running_ = true;
 	echo_service_ = std::make_unique<EchoService>();
+	calculator_service_ = std::make_unique<CalculatorService>();
 	dispatcher_.registerService(echo_service_.get());
+	dispatcher_.registerService(calculator_service_.get());
 }
 
 TcpServer::~TcpServer(){

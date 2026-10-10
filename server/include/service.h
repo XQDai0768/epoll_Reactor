@@ -4,6 +4,7 @@
 #include "service.pb.h"
 #include <unordered_map>
 #include <functional>
+#include "error_code.h"
 
 using Handler = std::function<void(const rpc::RpcMessage& req, rpc::RpcMessage* resp)>;
 
