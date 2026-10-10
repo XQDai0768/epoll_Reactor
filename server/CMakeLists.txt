@@ -58,6 +58,7 @@ add_executable(server
 	src/service.cpp
 	src/echo_service.cpp
 	src/dispatcher.cpp
+	src/calculator_service.cpp
 )
 
 target_include_directories(server
