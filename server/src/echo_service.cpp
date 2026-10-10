@@ -3,17 +3,9 @@
 #include "echo.pb.h"
 
 EchoService::EchoService() : Service("EchoService"){
-    methods_["Echo"] = [this](const rpc::RpcMessage& req,rpc::RpcMessage* resp){
-        echo(req, resp); 
-    };
-}
-
-void EchoService::callMethod(const std::string& method,
-                const rpc::RpcMessage& req,
-                rpc::RpcMessage* resp) {
-    auto it = methods_.find(method);
-    if(it != methods_.end()) it->second();
-    else resp->set_error_code(kMethodNotFound);
+    addMethod("Echo", [this](const rpc::RpcMessage& req,rpc::RpcMessage* resp){
+        echo(req, resp);
+    });
 }
 
 void EchoService::echo(const rpc::RpcMessage& req, rpc::RpcMessage* resp) {

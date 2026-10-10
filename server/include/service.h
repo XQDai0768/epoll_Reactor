@@ -2,6 +2,8 @@
 
 #include <string>
 #include "service.pb.h"
+#include <unordered_map>
+#include <functional>
 
 using Handler = std::function<void(const rpc::RpcMessage& req, rpc::RpcMessage* resp)>;
 
@@ -14,8 +16,10 @@ public:
     virtual ~Service() = default;
     const std::string& name() const;
 
-    // 核心分发入口：纯虚，子类必须实现
-    virtual void callMethod(const std::string& method,
+    // 核心分发入口
+    void callMethod(const std::string& method,
                             const rpc::RpcMessage& req,
-                            rpc::RpcMessage* resp) = 0;
+                            rpc::RpcMessage* resp);
+protected:
+    void addMethod(const std::string& method, Handler handler);   // 子类构造时注册
 };
