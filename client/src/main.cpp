@@ -8,7 +8,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    const std::string ip = argv[1];
+    const char* ip = argv[1];
     uint16_t port = std::atoi(argv[2]);
 
     RpcClient client(ip, port);
