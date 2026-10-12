@@ -15,7 +15,7 @@ protobuf_generate(
     APPEND_PATH
     OUT_VAR PROTO_SRCS
     PROTOC_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    PROTOS ../server/proto/service.proto ../server/proto/echo.proto
+    PROTOS ../server/proto/service.proto ../server/proto/echo.proto ../server/proto/calculator.proto
 )
 
 add_library(proto_lib STATIC ${PROTO_SRCS})
@@ -26,9 +26,15 @@ target_include_directories(proto_lib PUBLIC
 target_link_libraries(proto_lib PUBLIC protobuf::libprotobuf)
 
 add_executable(client
-    main.cpp
+    src/main.cpp
+    src/rpc_client.cpp
     ../server/src/buffer.cpp
     ../server/src/rpc_codec.cpp
+)
+
+target_include_directories(client
+	PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 target_include_directories(client PRIVATE
