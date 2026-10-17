@@ -23,6 +23,8 @@ EventLoop::EventLoop(){
 }
 
 EventLoop::~EventLoop(){
+	timer_.reset();
+
 	if(epollfd_ != -1) close(epollfd_);	
 
 	if(eventfd_ != - 1) close(eventfd_);

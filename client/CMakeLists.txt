@@ -30,6 +30,9 @@ add_executable(client
     src/rpc_client.cpp
     ../server/src/buffer.cpp
     ../server/src/rpc_codec.cpp
+    ../server/src/eventloop.cpp
+    ../server/src/channel.cpp
+    ../server/src/timer_queue.cpp
 )
 
 target_include_directories(client
@@ -41,4 +44,26 @@ target_include_directories(client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../server/include
 )
 
-target_link_libraries(client PRIVATE proto_lib)
+find_package(Threads REQUIRED)
+target_link_libraries(client PRIVATE Threads::Threads proto_lib)
+
+add_executable(async_client
+    src/async_main.cpp
+    src/rpc_channel.cpp
+    ../server/src/eventloop.cpp
+    ../server/src/channel.cpp
+    ../server/src/timer_queue.cpp
+    ../server/src/buffer.cpp
+    ../server/src/rpc_codec.cpp    
+)
+
+target_include_directories(async_client
+	PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(async_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../server/include
+)
+
+target_link_libraries(async_client PRIVATE Threads::Threads proto_lib)
