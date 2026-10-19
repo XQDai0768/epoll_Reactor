@@ -7,12 +7,14 @@
 #include "buffer.h"
 #include "rpc_codec.h"
 #include <unordered_map>
+#include <cstdint>
 
 class EventLoop;
 class Channel;
 
 struct Pending{
     std::function<void(const rpc::RpcMessage&)> callback;
+    std::uint64_t timer_id = UINT64_MAX;
 };
 
 class RpcChannel{
@@ -27,9 +29,11 @@ private:
     std::unordered_map<uint64_t, Pending> pending_;
     Buffer inputBuffer_;
     RpcCodec codec_;
+    bool connected_;
 
     int setNonBlock(int fd);
     void handleRead();
+    void cleanUp(bool callback);
 public:
     RpcChannel(EventLoop* loop, const char* ip_addr, uint16_t port);
     ~RpcChannel();

@@ -4,12 +4,17 @@
 #include <cstdlib>
 #include <iostream>
 #include "echo.pb.h"
+#include "error_code.h"
+#include <csignal>
 
 int main(int argc, char* argv[]){
     if (argc < 3) {
         std::cout << "usage: client <ip> <port>\n";
         return -1;
     }
+
+    //忽略SIGPIPE信号
+	std::signal(SIGPIPE, SIG_IGN);
 
     const char* ip = argv[1];
     uint16_t port = std::atoi(argv[2]);
@@ -28,8 +33,13 @@ int main(int argc, char* argv[]){
         req.SerializeToString(&payload);
         rpc_channel->call("EchoService", "Echo", payload, [&received, &loop](const rpc::RpcMessage& resp){
             rpc::EchoResponse r;
-            r.ParseFromString(resp.payload());
-            std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            if(resp.error_code() == kOk){
+                r.ParseFromString(resp.payload());
+                std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            }
+            else{
+                std::cout << resp.error_code() << "\n";
+            }
 
             if(++received == 3) loop->quit();
         });
@@ -38,8 +48,13 @@ int main(int argc, char* argv[]){
         req.SerializeToString(&payload);
         rpc_channel->call("EchoService", "Echo", payload, [&received, &loop](const rpc::RpcMessage& resp){
             rpc::EchoResponse r;
-            r.ParseFromString(resp.payload());
-            std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            if(resp.error_code() == kOk){
+                r.ParseFromString(resp.payload());
+                std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            }
+            else{
+                std::cout << resp.error_code() << "\n";
+            }
             if(++received == 3) loop->quit();
         });
 
@@ -47,8 +62,14 @@ int main(int argc, char* argv[]){
         req.SerializeToString(&payload);
         rpc_channel->call("EchoService", "Echo", payload, [&received, &loop](const rpc::RpcMessage& resp){
             rpc::EchoResponse r;
-            r.ParseFromString(resp.payload());
-            std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            if(resp.error_code() == kOk){
+                r.ParseFromString(resp.payload());
+                std::cout << "resp id=" << resp.request_id() << " text=" << r.text() << "\n";
+            }
+            else{
+                std::cout << resp.error_code() << "\n";
+            }
+            
             if(++received == 3) loop->quit();
         });
 

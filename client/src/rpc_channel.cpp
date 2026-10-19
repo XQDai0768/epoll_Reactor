@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <cerrno>
 #include "channel.h"
+#include "eventloop.h"
+#include "error_code.h"
 
 RpcChannel::RpcChannel(EventLoop *loop, const char* ip_addr, uint16_t port){
     loop_ = loop;
@@ -14,17 +16,17 @@ RpcChannel::RpcChannel(EventLoop *loop, const char* ip_addr, uint16_t port){
     port_ = port;
     fd_ = -1;
     next_request_id_ = 0;
+    connected_ = false;
 }
 
 RpcChannel::~RpcChannel(){
-    closeConnection();
+    cleanUp(false);
+
+    channel_.reset();
 }
 
 int RpcChannel::startConnect(){
-    if(fd_ != -1){
-        close(fd_);
-        fd_ = -1;
-    } 
+    if(fd_ != -1) closeConnection();
 
     fd_ = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -35,6 +37,8 @@ int RpcChannel::startConnect(){
 
     if(setNonBlock(fd_) == -1){
         perror("setNonBlock():");
+        close(fd_);
+        fd_ = -1;
         return -1;
     }
 
@@ -62,6 +66,8 @@ int RpcChannel::startConnect(){
             return -1;
         }
 
+        connected_ = true;
+
         if(connectedCallback_) connectedCallback_();
     }
     else if(ret == -1 && errno == EINPROGRESS){
@@ -87,6 +93,8 @@ int RpcChannel::startConnect(){
                     return;
                 }
 
+                connected_ = true;
+
                 if(connectedCallback_) connectedCallback_();
             }
             else{
@@ -111,8 +119,18 @@ int RpcChannel::startConnect(){
 void RpcChannel::call(const std::string& service, const std::string& method, 
         const std::string& payload, std::function<void(const rpc::RpcMessage&)> cb){
     
-    if(fd_ == -1) return;
     uint64_t id = next_request_id_++;
+
+    if(!connected_){
+        rpc::RpcMessage resp;
+        resp.set_request_id(id);
+        resp.set_type(rpc::MESSAGE_TYPE_RESPONSE);
+        resp.set_error_code(kNetworkError);
+
+        if(cb) cb(resp);
+
+        return;
+    }
 
     rpc::RpcMessage req;
     req.set_type(rpc::MESSAGE_TYPE_REQUEST);
@@ -123,6 +141,19 @@ void RpcChannel::call(const std::string& service, const std::string& method,
     req.set_payload(payload);
 
     pending_[id].callback = cb;
+    pending_[id].timer_id = loop_->addTimer(std::chrono::seconds(30), [this, id](){
+        auto it = pending_.find(id);
+        if(it == pending_.end()) return;
+        auto call_back = std::move(it->second.callback);
+        pending_.erase(id);
+
+        rpc::RpcMessage resp;
+        resp.set_request_id(id);
+        resp.set_type(rpc::MESSAGE_TYPE_RESPONSE);
+        resp.set_error_code(kTimeout);
+
+        if(call_back) call_back(resp);
+    });
 
     Buffer sendBuf;
     codec_.encode(req, &sendBuf);
@@ -133,6 +164,21 @@ void RpcChannel::call(const std::string& service, const std::string& method,
         ssize_t n = ::send(fd_, sendBuf.peek() + sent, sendBuf.readableBytes() - sent, 0);
         if (n <= 0) {
             perror("send");
+            if(pending_[id].timer_id != UINT64_MAX) loop_->cancelTimer(pending_[id].timer_id);
+
+            auto it = pending_.find(id);
+            if(it != pending_.end()){
+                auto call_back = std::move(it->second.callback);
+                pending_.erase(it);
+
+                rpc::RpcMessage resp;
+                resp.set_request_id(id);
+                resp.set_type(rpc::MESSAGE_TYPE_RESPONSE);
+                resp.set_error_code(kNetworkError);
+
+                if(call_back) call_back(resp);
+            }
+            
             closeConnection();
             return;
         }
@@ -140,15 +186,10 @@ void RpcChannel::call(const std::string& service, const std::string& method,
     }
 
     std::cout << "已发送请求 (" << sent << " 字节)\n";
-
 }
 
 void RpcChannel::handleRead(){
     auto ret = inputBuffer_.readFd(fd_);
-    if(ret == ReturnResult::Closed || ret == ReturnResult::Error){
-        closeConnection();
-        return;
-    }
     
     while(true){
         rpc::RpcMessage resp;
@@ -157,6 +198,7 @@ void RpcChannel::handleRead(){
             auto it = pending_.find(resp.request_id());
             if(it != pending_.end()){
                 auto cb = std::move(it->second.callback);
+                if(it->second.timer_id != UINT64_MAX) loop_->cancelTimer(it->second.timer_id);
                 pending_.erase(it);
                 if(cb) cb(resp);
                 continue;
@@ -169,17 +211,44 @@ void RpcChannel::handleRead(){
         else if(r == ParseResult::kNeedMore) break;
         else {
             closeConnection();
-            break;
+            return;
         }
     }
+
+    if(ret == ReturnResult::Closed || ret == ReturnResult::Error) closeConnection();
 }
 
 void RpcChannel::closeConnection(){
-    if(fd_ == -1) return;
+    cleanUp(true);
+}
 
-	if(channel_ != nullptr) channel_->remove();
-	close(fd_);
-	fd_ = -1;
+void RpcChannel::cleanUp(bool callback){
+    std::unordered_map<uint64_t, std::function<void(const rpc::RpcMessage&)>> cbs;
+    for(auto& [key, value] : pending_){
+        if(value.timer_id != UINT64_MAX) loop_->cancelTimer(value.timer_id);
+        cbs.insert({key, std::move(value.callback)});
+    }
+    pending_.clear();
+    connected_ = false;
+
+    inputBuffer_.retrieveAll();
+
+    if(fd_ != -1){
+        if(channel_ != nullptr && channel_->getIndex() != -1) channel_->remove();
+        close(fd_);
+        fd_ = -1;
+    }
+
+    if(callback){
+        for(auto& [key, value] : cbs){
+            rpc::RpcMessage resp;
+            resp.set_request_id(key);
+            resp.set_type(rpc::MESSAGE_TYPE_RESPONSE);
+            resp.set_error_code(kNetworkError);
+
+            if(value) value(resp);
+        }
+    }
 }
 
 int RpcChannel::setNonBlock(int fd){
