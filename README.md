@@ -1,14 +1,22 @@
-# 基于Reactor模型Protobuf协议的简易RPC框架
+# 基于Reactor模型和Protobuf协议的简易RPC框架
 
-一个基于 **epoll + Reactor** 的 C++17 服务端 / 客户端学习项目，目标是逐步演进为完整的简易 RPC 框架。
+一个基于 **epoll + Reactor + Protobuf** 的 C++17 **Mini RPC Framework**，采用非阻塞 I/O、边缘触发、事件驱动和线程池，实现 RPC 编解码、服务注册与分发、同步/异步客户端调用、请求级超时与优雅退出。
 
-当前版本 **v7**：在 Reactor 网络层之上完成了 Protobuf 编解码、服务注册与分发、以及客户端同步 stub。服务端可以注册多个服务与多个方法，客户端通过强类型接口发起调用，请求 / 响应端到端已经跑通。
+当前版本 **v8**：在 v7 的 Protobuf RPC 基础上完成非阻塞连接与异步客户端，支持基于 `request_id` 的单连接多请求并发、响应乱序匹配和每请求独立超时。
+
+## 技术栈
+
+- 语言与标准：C++17
+- 网络与 I/O：Linux epoll、非阻塞 I/O、EPOLLET、eventfd、timerfd
+- 架构与并发：Reactor、IO 线程 + 业务线程池、RAII、shared_ptr / weak_ptr
+- 协议：Protobuf、4 字节大端长度分帧
+- 构建与环境：CMake、GCC/G++、Docker、Git
 
 ---
 
 ## 项目简介
 
-本项目从一个阻塞 echo server 开始，逐步加入：
+项目采用渐进式架构演进，覆盖从 socket 编程到完整 RPC 调用链的核心能力：
 
 - epoll 多路复用
 - Reactor 事件分发模型
@@ -19,8 +27,10 @@
 - 空闲连接超时
 - SIGINT / SIGTERM 优雅退出
 - Protobuf 编解码
-- RPC 服务注册、分发与客户端 stub
-- 客户端调用超时与断线重连
+- RPC 服务注册、分发与同步客户端 stub
+- 非阻塞异步客户端与 request_id 多路复用
+- 请求级超时与失败清理
+- CMake 构建与 Docker 化开发环境
 
 ---
 
@@ -28,7 +38,7 @@
 
 | 版本 | 名称 | 相比上一版本的主要更新 |
 | --- | --- | --- |
-| v0 | 阻塞 echo server | 掌握 socket、bind、listen、accept、read、write、close，实现单连接回显 |
+| v0 | 阻塞 echo server | 实现 socket、bind、listen、accept、read、write、close，完成单连接回显 |
 | v1 | epoll LT 单文件 | 引入 epoll_create/ctl/wait，支持多连接；新增非阻塞 clientfd 和 4 字节长度协议 |
 | v2 | Reactor OOP | 拆出 EventLoop、Channel、Acceptor、TcpConnection、Buffer，建立事件分发与回调体系 |
 | v3 | TcpServer + ET | 新增 TcpServer 抽象；启用边缘触发；通过 runInLoop 延迟清理连接 |
@@ -36,10 +46,11 @@
 | v5 | 优雅退出 + 信号处理 | 忽略 SIGPIPE；处理 SIGINT/SIGTERM；Acceptor/TcpServer 停止流程与资源释放顺序 |
 | v6 | TimerQueue | 引入 timerfd 定时器；支持一次性/周期任务、取消任务和空闲连接超时关闭 |
 | v7 | Protobuf RPC 化 | 定义 RpcMessage 信封；RpcCodec 编解码；Service 基类与方法注册表；Dispatcher 服务路由；EchoService / CalculatorService；客户端同步 stub；客户端超时与断线重连 |
+| v8 | 异步并发客户端 | 非阻塞 connect；request_id pending 映射；单连接多请求并发；响应乱序匹配；每请求独立 TimerQueue 超时；异步客户端示例 |
 
-当前最新版本：**v7**
+当前最新版本：**v8**
 
-下一阶段：**v8 异步并发客户端（request_id 多路复用）**
+下一阶段：**v9 连接复用与服务端多 Reactor 演进（规划）**
 
 ---
 
@@ -77,7 +88,8 @@
 - `Dispatcher` 按 service 路由到 Service，按 method 分发到 Handler
 - `EchoService`、`CalculatorService` 两个示例服务
 - 客户端同步 stub：`Echo()` / `Add()` 强类型接口
-- 客户端调用超时（`SO_RCVTIMEO`）与失败断线重连
+- 同步客户端：基于 `SO_RCVTIMEO` 的调用超时与失败断线重连
+- 异步客户端：非阻塞 connect、`request_id` 多路复用、请求级超时与 pending 清理
 
 ---
 
@@ -93,10 +105,10 @@
 │   ├── olds/             # 历史版本快照
 │   └── CMakeLists.txt
 ├── client/
-│   ├── include/          # 客户端头文件（RpcClient）
-│   ├── src/              # 客户端实现与示例 main
+│   ├── include/          # 客户端头文件（RpcClient / RpcChannel）
+│   ├── src/              # 同步/异步客户端实现与示例 main
 │   └── CMakeLists.txt
-├── docs/                 # 学习笔记、技能清单、错误记录
+├── docs/                 # 设计笔记、技能清单、错误记录
 ├── README.md
 └── .gitignore
 ```
@@ -117,7 +129,8 @@
 | `Service` | 服务基类，维护 method 到 Handler 的注册表 |
 | `Dispatcher` | 按 service / method 把请求路由到对应 Handler |
 | `EchoService` / `CalculatorService` | 示例服务实现 |
-| `RpcClient` | 客户端：建连、编码发送、接收解码、超时与重连 |
+| `RpcClient` | 同步客户端：建连、编码发送、接收解码、超时与重连 |
+| `RpcChannel` | 异步客户端：非阻塞 connect、request_id pending 映射、请求级超时 |
 
 ---
 
@@ -158,9 +171,10 @@ cmake --build server/build -j
 cmake -S client -B client/build
 cmake --build client/build -j
 ./client/build/client 127.0.0.1 8888
+./client/build/async_client 127.0.0.1 8888
 ```
 
-客户端会依次调用 `EchoService.Echo` 和 `CalculatorService.Add` 并打印结果。
+`client` 为同步客户端，会依次调用 `EchoService.Echo` 和 `CalculatorService.Add`；`async_client` 为异步客户端，会在同一连接上并发发送多个 Echo 请求，并按 `request_id` 匹配乱序返回的响应。
 
 > 客户端与服务端共用 `buffer.cpp`、`rpc_codec.cpp`，Protobuf 代码从 `server/proto/` 生成。
 
@@ -207,21 +221,22 @@ cmake --build client/build -j
 - `timerfd` 被注册进 epoll，定时器到期后以事件方式处理。
 - 收到完整消息后重置空闲定时器，超时则关闭连接。
 - 业务与网络解耦：`Service` 只关心收到 RpcMessage 后填回 RpcMessage，不接触 socket。
-- 客户端把一次调用封装为 `call()`：编码发送到接收解码，最后返回响应信封；上层 stub 负责 payload 的序列化与反序列化。
+- 同步客户端把一次调用封装为 `call()`：编码发送到接收解码，最后返回响应信封；上层 stub 负责 payload 的序列化与反序列化。
+- 异步客户端通过 `request_id` 维护 pending 表，单连接可同时存在多个在途请求；响应按 id 查找回调，不依赖到达顺序。
+- 每个异步请求由 `TimerQueue` 独立计时，响应到达时取消定时器；超时与响应竞争时以先删除 pending 的一方为准，避免重复回调。
 
 ---
 
 ## 当前限制
 
-- 客户端是**同步阻塞**的：一次只能有一个请求在途，`call()` 返回前调用线程一直等待。
-- 客户端超时基于 `SO_RCVTIMEO`，超时粒度为整条连接，而非单个请求。
-- 未做 `request_id` 匹配校验，超时重连场景下仍可能读到错配响应。
-- 失败即重试，未做幂等 / 去重，属于 at-least-once 语义。
-- 没有连接池与连接复用，没有服务注册发现与负载均衡。
-- 没有心跳 / 保活机制。
-- 没有统一的日志系统和配置模块。
-- 定时器使用 `std::multimap`，适合学习阶段，不适合海量定时器。
-- 单元测试、压力测试体系还不完整。
+- 服务端当前是单 IO Reactor + 业务线程池，尚未实现 main/sub 多 Reactor。
+- 异步客户端当前使用单连接多路复用，尚未实现连接池与多连接负载分摊。
+- 客户端发送路径尚未为大 payload 实现完整的 EPOLLOUT 发送队列；当前按单次 `send` 完成处理，遇到 `EAGAIN` 会按网络错误处理。
+- 同步客户端仍保留 `SO_RCVTIMEO` 作为调用超时；异步客户端使用 TimerQueue 做请求级超时。
+- 失败调用未做幂等 / 去重，重试语义为 at-least-once。
+- 没有心跳 / 保活、统一日志、配置模块、服务注册发现与负载均衡。
+- 定时器使用 `std::multimap`，适合中小规模定时任务，尚未替换为最小堆或时间轮。
+- 单元测试、压力测试和性能数据仍待完善。
 
 ---
 
@@ -232,9 +247,11 @@ cmake --build client/build -j
 - [x] RPC 服务注册与分发
 - [x] RPC 客户端与 stub
 - [x] 请求超时与断线重连
-- [ ] 异步并发客户端（request_id 多路复用）—— 下一阶段 v8
-- [ ] 每次请求独立的超时管理（基于 TimerQueue）
+- [x] 异步并发客户端（request_id 多路复用）
+- [x] 每次请求独立的超时管理（基于 TimerQueue）
+- [ ] 客户端发送缓冲与 EPOLLOUT 队列
 - [ ] 客户端连接池与连接复用
+- [ ] 服务端多 Reactor（main/sub Reactor）
 - [ ] 心跳 / 保活
 - [ ] 服务注册与发现、负载均衡
 - [ ] 统一日志系统
@@ -242,21 +259,17 @@ cmake --build client/build -j
 - [ ] 定时器优化：最小堆或时间轮
 - [ ] Google Test 单元测试
 - [ ] 压力测试与性能数据
-- [ ] Dockerfile 与容器化构建
+- [ ] 仓库内 Dockerfile 与一键启动脚本
 - [ ] HTTP 协议或简单网关能力
 
 ---
 
-## 学习文档
+## 项目文档
 
-更多设计思路、自查问题和学习笔记见：
-
-- `docs/LEARNING_NOTES.md`
-- `docs/SKILL_CHECKLIST.md`
-- `docs/ERROR.md`
+设计思路、自查问题与问题记录见 `docs/` 目录。
 
 ---
 
 ## 说明
 
-这是一个学习项目，代码会持续迭代和重构。当前阶段优先保证“理解原理、掌握设计”，性能优化和工程化细节会逐步补充。
+本项目持续迭代，当前重点是完善异步 RPC 客户端、自动化测试与性能数据；后续将演进连接复用、多 Reactor、心跳与可观测性。
