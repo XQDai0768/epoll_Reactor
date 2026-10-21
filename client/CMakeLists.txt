@@ -27,7 +27,7 @@ target_link_libraries(proto_lib PUBLIC protobuf::libprotobuf)
 
 find_package(Threads REQUIRED)
 
-add_executable(async_client
+add_executable(client
     src/main.cpp
     src/rpc_channel.cpp
     ../server/src/eventloop.cpp
@@ -37,13 +37,13 @@ add_executable(async_client
     ../server/src/rpc_codec.cpp    
 )
 
-target_include_directories(async_client
+target_include_directories(client
 	PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_include_directories(async_client PRIVATE
+target_include_directories(client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../server/include
 )
 
-target_link_libraries(async_client PRIVATE Threads::Threads proto_lib)
+target_link_libraries(client PRIVATE Threads::Threads proto_lib)
