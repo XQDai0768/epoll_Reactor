@@ -45,9 +45,15 @@ int TcpServer::start(){
 			});
 		});
 
-		tcp_->setCloseCallback([&, fd](){
-			loop_->runInLoop([this, fd](){
-				connections_.erase(fd);
+		tcp_->setCloseCallback([&, ptr_, fd](){
+			loop_->runInLoop([this, ptr_, fd](){
+				auto p = ptr_.lock();
+				if(p != nullptr){
+					auto it = connections_.find(fd);
+					if(it != connections_.end() && it->second == p){
+						connections_.erase(fd);
+					}
+				}
 			});
 		});
 

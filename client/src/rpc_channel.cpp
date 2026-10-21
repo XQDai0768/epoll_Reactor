@@ -17,6 +17,7 @@ RpcChannel::RpcChannel(EventLoop *loop, const char* ip_addr, uint16_t port){
     fd_ = -1;
     next_request_id_ = 0;
     connected_ = false;
+    connect_timer_id_ = UINT64_MAX;
 }
 
 RpcChannel::~RpcChannel(){
@@ -57,6 +58,17 @@ int RpcChannel::startConnect(){
     channel_->setReadCallback([this](){
         handleRead();
     });
+    channel_->setWriteCallback([this](){
+        handleWrite();
+	});
+    channel_->setCloseCallback([this](){
+        if(connected_) closeConnection();
+        else handleConnectFailed();
+    });
+    channel_->setErrorCallback([this](){
+        if(connected_) closeConnection();
+        else handleConnectFailed();
+    });
 
     ssize_t ret = ::connect(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     if(ret == 0){
@@ -71,43 +83,16 @@ int RpcChannel::startConnect(){
         if(connectedCallback_) connectedCallback_();
     }
     else if(ret == -1 && errno == EINPROGRESS){
-        channel_->setWriteCallback([this](){
-            int err = 0;
-            socklen_t len = sizeof(err);
-            if (getsockopt(fd_, SOL_SOCKET, SO_ERROR, &err, &len) == -1) {
-                perror("getsockopt SO_ERROR");
-                closeConnection();
-                return;
-            }
-
-            if(err == 0){
-                if(channel_->disableWriting() == -1){
-                    std::cout << "Error:disableWriting()" << std::endl;
-                    closeConnection();
-                    return;
-                }
-
-                if(channel_->enableReading() == -1){
-                    std::cout << "Error:enableReading()" << std::endl;
-                    closeConnection();
-                    return;
-                }
-
-                connected_ = true;
-
-                if(connectedCallback_) connectedCallback_();
-            }
-            else{
-                closeConnection();
-                return;
-            }
-	    });
 
         if(channel_->enableWriting() == -1){
 		    std::cout << "Error:enableWriting()" << std::endl;
 		    closeConnection();
             return -1;
 	    }
+
+        connect_timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
+            handleConnectFailed();
+        });
     }
     else{
         closeConnection();
@@ -155,37 +140,9 @@ void RpcChannel::call(const std::string& service, const std::string& method,
         if(call_back) call_back(resp);
     });
 
-    Buffer sendBuf;
-    codec_.encode(req, &sendBuf);
+    codec_.encode(req, &outputBuffer_);
 
-    //发送
-    size_t sent = 0;
-    while (sent < sendBuf.readableBytes()) {
-        ssize_t n = ::send(fd_, sendBuf.peek() + sent, sendBuf.readableBytes() - sent, 0);
-        if (n <= 0) {
-            perror("send");
-            if(pending_[id].timer_id != UINT64_MAX) loop_->cancelTimer(pending_[id].timer_id);
-
-            auto it = pending_.find(id);
-            if(it != pending_.end()){
-                auto call_back = std::move(it->second.callback);
-                pending_.erase(it);
-
-                rpc::RpcMessage resp;
-                resp.set_request_id(id);
-                resp.set_type(rpc::MESSAGE_TYPE_RESPONSE);
-                resp.set_error_code(kNetworkError);
-
-                if(call_back) call_back(resp);
-            }
-            
-            closeConnection();
-            return;
-        }
-        sent += static_cast<size_t>(n);
-    }
-
-    std::cout << "已发送请求 (" << sent << " 字节)\n";
+    send();
 }
 
 void RpcChannel::handleRead(){
@@ -218,6 +175,96 @@ void RpcChannel::handleRead(){
     if(ret == ReturnResult::Closed || ret == ReturnResult::Error) closeConnection();
 }
 
+void RpcChannel::handleWrite(){
+    if(fd_ == -1) return;
+
+    if(connected_){
+        send();
+    }
+    else{
+        int err = 0;
+        socklen_t len = sizeof(err);
+        if (getsockopt(fd_, SOL_SOCKET, SO_ERROR, &err, &len) == -1) {
+            perror("getsockopt SO_ERROR");
+            handleConnectFailed();
+            return;
+        }
+
+        if(err == 0){
+            if(channel_->disableWriting() == -1){
+                std::cout << "Error:disableWriting()" << std::endl;
+                handleConnectFailed();
+                return;
+            }
+
+            if(channel_->enableReading() == -1){
+                std::cout << "Error:enableReading()" << std::endl;
+                handleConnectFailed();
+                return;
+            }
+
+            if(connect_timer_id_ != UINT64_MAX){
+                loop_->cancelTimer(connect_timer_id_);
+                connect_timer_id_ = UINT64_MAX;
+            }
+
+            connected_ = true;
+
+            if(connectedCallback_) connectedCallback_();
+        }
+        else{
+            handleConnectFailed();
+            return;
+        }
+    }
+}
+
+void RpcChannel::send(){
+
+    while (outputBuffer_.readableBytes() > 0) {
+        ssize_t n = ::send(fd_, outputBuffer_.peek(), outputBuffer_.readableBytes(), 0);
+        if(n > 0) outputBuffer_.retrieve(n);
+        else if(n == -1 && errno == EAGAIN){
+            if(channel_->enableWriting() == -1){
+		        std::cout << "Error:enableWriting()" << std::endl;
+		        closeConnection();
+                return;
+	        }
+            break;
+        }
+        else if(n == -1 && errno == EINTR) continue;
+        else{
+            perror("send");
+            closeConnection();
+            return;
+        }
+    }
+
+    if(outputBuffer_.readableBytes() == 0 && channel_->isWriting() && channel_->disableWriting() == -1){
+        std::cout << "Error:disableWriting()" << std::endl;
+        closeConnection();
+        return;
+    }
+}
+
+void RpcChannel::handleConnectFailed(){
+    if(fd_ == -1 || connected_) return;
+
+    if(connect_timer_id_ != UINT64_MAX){
+        loop_->cancelTimer(connect_timer_id_);
+        connect_timer_id_ = UINT64_MAX;
+    }
+
+    if(channel_ != nullptr && channel_->getIndex() != -1) channel_->remove();
+
+    if(fd_ != -1){
+        close(fd_);
+        fd_ = -1;
+    }
+
+    if(connectFailedCallback_) connectFailedCallback_();
+}
+
 void RpcChannel::closeConnection(){
     cleanUp(true);
 }
@@ -232,6 +279,12 @@ void RpcChannel::cleanUp(bool callback){
     connected_ = false;
 
     inputBuffer_.retrieveAll();
+    outputBuffer_.retrieveAll();
+
+    if(connect_timer_id_ != UINT64_MAX){
+        loop_->cancelTimer(connect_timer_id_);
+        connect_timer_id_ = UINT64_MAX;
+    }
 
     if(fd_ != -1){
         if(channel_ != nullptr && channel_->getIndex() != -1) channel_->remove();
@@ -262,4 +315,8 @@ int RpcChannel::setNonBlock(int fd){
 
 void RpcChannel::setConnectedCallback(std::function<void()> func){
     connectedCallback_ = func;
+}
+
+void RpcChannel::setConnectFailedCallback(std::function<void()> func){
+    connectFailedCallback_ = func;
 }

@@ -150,6 +150,8 @@ int EventLoop::updateChannel(Channel* ch){
 	注销Channel
 */
 int EventLoop::removeChannel(Channel* ch){
+	if(ch->getIndex() == -1) return 0;
+
 	if(epoll_ctl(epollfd_, EPOLL_CTL_DEL, ch->getFd(), nullptr) == -1){
 		perror("epoll_ctl: DEL");
 		return -1;

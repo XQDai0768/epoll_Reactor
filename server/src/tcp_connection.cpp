@@ -24,11 +24,13 @@ TcpConnection::TcpConnection(EventLoop* loop, int clientfd){
 	if(channel_->enableReading() == -1){
 		std::cout << "Error:enableReading()" << std::endl;
 		closeConnection();
+		return;
 	}
 
 	timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
 		std::cout << "Connection overtime" << std::endl;
 		closeConnection();
+		return;
 	});
 }
 
@@ -48,36 +50,39 @@ TcpConnection::~TcpConnection(){
 int TcpConnection::readData(){
 	ReturnResult res = inputBuffer_.readFd(clientfd_);
 	
+	while(true){
+		rpc::RpcMessage msg;
+    	ParseResult r = codec_.decode(&inputBuffer_, &msg);
+		if (r == ParseResult::kOk) {
+        	if(timer_id_ != UINT64_MAX) loop_->cancelTimer(timer_id_);
+			timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
+				std::cout << "Connection Timeout" << std::endl;
+				closeConnection();
+			});
+
+        	if (messageCallback_) messageCallback_(msg);
+        	continue;             // 继续解，处理粘包
+    	} 
+		else if (r == ParseResult::kNeedMore) break;     // 数据不够，等下次读
+		else {
+        	closeConnection();    // kInvalidLength / kParseError
+        	return -1;
+    	}
+	}
+
 	if(res == ReturnResult::Closed || res == ReturnResult::Error){
 		closeConnection();
 		return -1;
 	}
-	else{
-		while(true){
-			rpc::RpcMessage msg;
-    		ParseResult r = codec_.decode(&inputBuffer_, &msg);
-			if (r == ParseResult::kOk) {
-        		if(timer_id_ != UINT64_MAX) loop_->cancelTimer(timer_id_);
-				timer_id_ = loop_->addTimer(std::chrono::seconds(30), [this](){
-					std::cout << "Connection Timeout" << std::endl;
-					closeConnection();
-				});
 
-        		if (messageCallback_) messageCallback_(msg);
-        		continue;             // 继续解，处理粘包
-    		} 
-			else if (r == ParseResult::kNeedMore) break;     // 数据不够，等下次读
-			else {
-        		closeConnection();    // kInvalidLength / kParseError
-        		return -1;
-    		}
-		}
-	}
 	return 0;
 }
 
 void TcpConnection::writeData(){
-	if(outputBuffer_.readableBytes() == 0) return;
+	if(outputBuffer_.readableBytes() == 0 && channel_->isWriting()){
+		channel_->disableWriting();
+		return;
+	}
 
 	//回显
 	while(true){

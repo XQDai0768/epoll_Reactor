@@ -97,6 +97,7 @@ int Acceptor::handleRead(){
 		if(clientfd >= 0){
 			if(setNonBlock(clientfd) == -1){
 				std::cout << "ERROR:setNonBlock" << std::endl;
+				close(clientfd);
 				return -1;
 			}
 			std::cout << "Connection:" << clientfd << std::endl;

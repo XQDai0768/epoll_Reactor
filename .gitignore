@@ -1,6 +1,12 @@
 #编码产出
 build/
 
+#旧版本
+olds/
+
+#测试
+test/
+
 #agent相关
 *.md
 !README.md
