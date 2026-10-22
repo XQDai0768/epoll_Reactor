@@ -6,7 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <cstdint>
-#include <map>
+#include <set>
 #include <unordered_map>
 #include <cstring>
 #include <unistd.h>
@@ -31,7 +31,7 @@ private:
     EventLoop* loop_;
     std::unique_ptr<Channel> timerChannel_;
     std::int64_t id_count_;//计时器ID计数器
-    std::multimap<TimePoint, std::uint64_t> tasks_;
+    std::set<std::pair<TimePoint, std::uint64_t>> tasks_;
     std::unordered_map<std::uint64_t, Timer> timers_;
 public:
     TimerQueue(EventLoop* loop);

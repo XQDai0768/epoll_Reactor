@@ -76,20 +76,12 @@ std::uint64_t TimerQueue::addTimer(Duration delay, Duration interval, std::funct
 }
 
 int TimerQueue::cancelTimer(std::uint64_t id){
-    timers_.erase(id);
-
-    //delete from tasks_
-    for (auto it = tasks_.begin(); it != tasks_.end(); ) {
-        if (it->second == id) {
-            it = tasks_.erase(it); // erase 返回下一个有效迭代器
-            check();  
-            return 0;
-        } else {
-            ++it;
-        }
-    }
-
-    return -1;
+    auto it = timers_.find(id);         
+    if (it == timers_.end()) return -1;
+    tasks_.erase({it->second.expireTime, id});
+    timers_.erase(it);
+    check(); 
+    return 0;
 }
 
 void TimerQueue::readCallback(){
@@ -112,7 +104,7 @@ void TimerQueue::readCallback(){
     std::vector<Timer> expired;
 
     // 第一个未到期的位置
-    auto endIt = tasks_.upper_bound(now);
+    auto endIt = tasks_.upper_bound({now, UINT64_MAX});
 
     //把符合条件的任务从容器中取出来
     for(auto it = tasks_.begin(); it != endIt; ++it){
@@ -126,7 +118,7 @@ void TimerQueue::readCallback(){
     }
 
     //更新容器，从 multimap 里删掉已到期的
-    tasks_.erase(tasks_.begin(), endIt);
+    tasks_.erase({tasks_.begin(), endIt});
 
     //执行回调
     for(auto& timer_ : expired){
