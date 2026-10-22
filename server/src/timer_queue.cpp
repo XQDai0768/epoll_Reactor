@@ -118,7 +118,7 @@ void TimerQueue::readCallback(){
     }
 
     //更新容器，从 multimap 里删掉已到期的
-    tasks_.erase({tasks_.begin(), endIt});
+    tasks_.erase(tasks_.begin(), endIt);
 
     //执行回调
     for(auto& timer_ : expired){
